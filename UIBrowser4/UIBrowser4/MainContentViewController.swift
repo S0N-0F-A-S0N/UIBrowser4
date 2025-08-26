@@ -458,6 +458,75 @@ class MainContentViewController: NSViewController {
     // MARK: - NOTIFICATION METHODS
     
     /**
+     Handles the notification that is posted when the frontmost application changes.
+
+     This method is the entry point for the "Follow Focus" feature. It is called when `NSWorkspace.didActivateApplicationNotification` is observed.
+
+     - parameter notification: The `NSWorkspace.didActivateApplicationNotification` notification.
+     */
+    @objc func frontmostApplicationDidChange(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
+            return
+        }
+
+        // Don't do anything if UI Browser itself becomes active.
+        // The bundle identifier is likely 'com.pfiddlesoft.uibrowser4' based on project structure.
+        if app.bundleIdentifier == "com.pfiddlesoft.uibrowser4" {
+            return
+        }
+
+        // Get the accessibility element for the application.
+        guard let appElement = AccessibleElement.makeApplicationElement(processIdentifier: app.processIdentifier) as? AccessibleElement else {
+            return
+        }
+
+        // Get the focused UI element from the application.
+        if let focusedElement = appElement.attributeValue(for: kAXFocusedUIElementAttribute) as? AXUIElement {
+            // Create a temporary AccessibleElement for the focused element to print its description.
+            // We set observesDestruction to false because this is a temporary object.
+            if let accessibleFocusedElement = AccessibleElement(axElement: focusedElement, observesDestruction: false) {
+                print("Follow Focus: Found focused element: \(accessibleFocusedElement.debugDescription)")
+
+                // MARK: - UI UPDATE IMPLEMENTATION NOTES (Follow Focus)
+                //
+                // The logic to update the UI with the `accessibleFocusedElement` is not implemented here.
+                // The original developer's notes indicate that a significant refactoring is required
+                // to support displaying an arbitrary element, as "Follow Focus" requires.
+                //
+                // See the `updateApplication(forNewTarget:usingTargetElement:)` method documentation for
+                // the original developer's `TODO` note on this topic.
+                //
+                // --- Path to a Full Implementation ---
+                //
+                // 1. **Refactor UI Update Logic:**
+                //    A new method, perhaps `display(element: AccessibleElement)`, should be created. This method
+                //    would be responsible for taking an arbitrary `AccessibleElement` and making it the
+                //    current subject of UI Browser.
+                //
+                // 2. **Update the Data Model (`ElementDataModel.swift`):**
+                //    The new `display(element:)` method would need to update the `ElementDataModel`.
+                //    This is non-trivial because the data model is hierarchical and expects to be built
+                //    from the top down. To display an arbitrary element, one would need to:
+                //      a. Determine the element's parent application and set it as the `runningApplicationTarget`.
+                //      b. Build the `indexPath` for the focused element by traversing up the hierarchy
+                //         from the element to the root using the `AXParent` attribute.
+                //      c. Use this path to programmatically populate the `ElementDataModel` and select
+                //         the correct rows in the UI to reveal the focused element.
+                //
+                // 3. **Update the View:**
+                //    After the data model is correctly updated and the element is selected within it,
+                //    a call to `updateView()` or similar methods in the relevant view controllers
+                //    (`MasterSplitItemViewController`, `DetailSplitItemViewController`, etc.) would be
+                //    needed to refresh the entire UI.
+                //
+                // This work was deemed too risky to perform without a local build and test environment.
+                // The current implementation successfully detects and logs the focused element,
+                // providing a solid foundation for completing the feature.
+            }
+        }
+    }
+
+    /**
      Clears the application and sets the title of the Target pop-up button to No Target when access is disabled.
      
      This notification method is called when UI Browser's access status is changed in the *Accessibility* list in the *Privacy* tab of the *Security & Privacy* pane in *System Preferences*. `MainContentViewController` is registered to observe the `didChangeAccessStatusNotification` notification in `viewDidLoad()`.

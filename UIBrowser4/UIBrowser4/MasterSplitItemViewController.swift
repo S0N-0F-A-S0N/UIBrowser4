@@ -286,11 +286,9 @@ class MasterSplitItemViewController: NSViewController, UserControlValidations, N
         let isTrusted = AccessibleElement.isProcessTrusted()
         switch item.action! {
         case #selector(highlightElement(_:)): // Highlight checkbox
-            return true
- //           return isTrusted
+            return isTrusted
         case #selector(followFocus(_:)): // FollowFocus checkbox
-            return true
- //           return isTrusted
+            return isTrusted
         case #selector(showScreenReader(_:)): // Screen Reader button
             return true
  //           return isTrusted
