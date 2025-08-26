@@ -482,46 +482,11 @@ class MainContentViewController: NSViewController {
 
         // Get the focused UI element from the application.
         if let focusedElement = appElement.attributeValue(for: kAXFocusedUIElementAttribute) as? AXUIElement {
-            // Create a temporary AccessibleElement for the focused element to print its description.
+            // Create a temporary AccessibleElement for the focused element.
             // We set observesDestruction to false because this is a temporary object.
             if let accessibleFocusedElement = AccessibleElement(axElement: focusedElement, observesDestruction: false) {
-                print("Follow Focus: Found focused element: \(accessibleFocusedElement.debugDescription)")
-
-                // MARK: - UI UPDATE IMPLEMENTATION NOTES (Follow Focus)
-                //
-                // The logic to update the UI with the `accessibleFocusedElement` is not implemented here.
-                // The original developer's notes indicate that a significant refactoring is required
-                // to support displaying an arbitrary element, as "Follow Focus" requires.
-                //
-                // See the `updateApplication(forNewTarget:usingTargetElement:)` method documentation for
-                // the original developer's `TODO` note on this topic.
-                //
-                // --- Path to a Full Implementation ---
-                //
-                // 1. **Refactor UI Update Logic:**
-                //    A new method, perhaps `display(element: AccessibleElement)`, should be created. This method
-                //    would be responsible for taking an arbitrary `AccessibleElement` and making it the
-                //    current subject of UI Browser.
-                //
-                // 2. **Update the Data Model (`ElementDataModel.swift`):**
-                //    The new `display(element:)` method would need to update the `ElementDataModel`.
-                //    This is non-trivial because the data model is hierarchical and expects to be built
-                //    from the top down. To display an arbitrary element, one would need to:
-                //      a. Determine the element's parent application and set it as the `runningApplicationTarget`.
-                //      b. Build the `indexPath` for the focused element by traversing up the hierarchy
-                //         from the element to the root using the `AXParent` attribute.
-                //      c. Use this path to programmatically populate the `ElementDataModel` and select
-                //         the correct rows in the UI to reveal the focused element.
-                //
-                // 3. **Update the View:**
-                //    After the data model is correctly updated and the element is selected within it,
-                //    a call to `updateView()` or similar methods in the relevant view controllers
-                //    (`MasterSplitItemViewController`, `DetailSplitItemViewController`, etc.) would be
-                //    needed to refresh the entire UI.
-                //
-                // This work was deemed too risky to perform without a local build and test environment.
-                // The current implementation successfully detects and logs the focused element,
-                // providing a solid foundation for completing the feature.
+                // Display the newly focused element in the UI.
+                display(element: accessibleFocusedElement)
             }
         }
     }
@@ -551,6 +516,86 @@ class MainContentViewController: NSViewController {
         
         // TODO: Reimplement this if decide to use my custom Detail buttom images.
         // mainWindowController!.setDetailButtonColor()
+    }
+
+    // MARK: - FOCUS TRACKING HELPERS
+
+    /// Displays a given accessibility element in the UI Browser, regardless of the current target.
+    /// This is the core method for the "Follow Focus" feature's UI update.
+    /// - Parameter element: The `AccessibleElement` to display.
+    private func display(element: AccessibleElement) {
+        // 1. Get the hierarchy path for the element.
+        guard let path = hierarchyPath(for: element) else {
+            print("Follow Focus Error: Could not determine hierarchy path for the element.")
+            return
+        }
+        guard let rootAppElement = path.first else {
+            print("Follow Focus Error: Path does not contain a root element.")
+            return
+        }
+
+        // 2. Get the running application for the root element.
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(rootAppElement.axElement, &pid) == .success,
+              let runningApp = NSRunningApplication(processIdentifier: pid) else {
+            print("Follow Focus Error: Could not get running application for the element.")
+            return
+        }
+
+        // 3. Set the application as the current target. This clears the old state and loads the root element.
+        updateApplication(forNewTarget: runningApp, usingTargetElement: rootAppElement)
+
+        // 4. Build the index path while simultaneously populating the data model for each step in the path.
+        let dataSource = ElementDataModel.sharedInstance
+
+        for i in 1..<path.count {
+            let parent = path[i-1]
+            let child = path[i]
+
+            guard let siblings = parent.AXChildren else {
+                print("Follow Focus Error: Could not get children of parent element \(parent).")
+                return // Path is broken
+            }
+
+            if let rowIndex = siblings.firstIndex(where: { $0.isEqual(to: child) }) {
+                // This is the key: we tell the data model to update itself as if the user
+                // had clicked on this item. This will load the children for the *next* level
+                // and set the current selection path in the model.
+                dataSource.updateDataModelForCurrentElementAt(level: i - 1, index: rowIndex)
+            } else {
+                print("Follow Focus Error: Could not find child \(child) in parent \(parent). Hierarchy mismatch.")
+                return // Path is broken
+            }
+        }
+
+        // 5. Now that the data model is fully populated along the path, tell the view to update.
+        // The `showView()` method will read the final selection path from the data model.
+        if let browserController = BrowserTabItemViewController.sharedInstance {
+            browserController.showView()
+        }
+    }
+
+    /// Builds the hierarchy path for a given accessibility element.
+    /// - Parameter element: The leaf element from which to build the path.
+    /// - Returns: An array of `AccessibleElement` objects representing the path from the root application element to the given element, or `nil` if the hierarchy is broken.
+    private func hierarchyPath(for element: AccessibleElement) -> [AccessibleElement]? {
+        var path: [AccessibleElement] = []
+        var currentElement: AccessibleElement? = element
+
+        while let current = currentElement {
+            path.insert(current, at: 0)
+
+            if current.isRole(kAXApplicationRole) {
+                // We have reached the top of the hierarchy for this application.
+                return path
+            }
+
+            currentElement = current.AXParent
+        }
+
+        // If we exit the loop because currentElement became nil before finding an application root,
+        // the hierarchy is malformed or incomplete.
+        return nil
     }
 
     // MARK: - ALERTS
