@@ -216,7 +216,15 @@ class MainContentViewController: NSViewController {
             isFinishedLaunchingObservation = nil
         }
         // TODO: [self unhighlightAction:sender];
-        // TODO: ditto follow focus mode?
+        // Disable Follow Focus mode if it's active, as a new target is being set manually.
+        if let masterController = MasterSplitItemViewController.sharedInstance {
+            if masterController.followFocusButton.state == .on {
+                masterController.followFocusButton.state = .off
+
+                // Also remove the observer to stop tracking.
+                NSWorkspace.shared.notificationCenter.removeObserver(self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
+            }
+        }
         
         // Set the new running application target to the proposed target. From this point forward, methods that do not take a target parameter rely on the new running application target property's value, and UI Browser cannot recover from errors in setting up the new target by preserving or restoring the old target but must instead deal with errors affecting the new target.
         runningApplicationTarget = target
