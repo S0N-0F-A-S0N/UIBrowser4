@@ -24,8 +24,13 @@ extension MasterSplitItemViewController {
      */
     @IBAction func followFocus(_ sender: NSButton) {
         // Action method connected from the FollowFocus checkbox to First Responder in Main.storyboard.
-        
-        let notificationCenter = NSWorkspace.shared.notificationCenter
+        // This is a thin wrapper that calls the testable helper method with the real workspace.
+        handleFollowFocus(sender: sender, workspace: .shared)
+    }
+
+    /// Helper method with dependencies injected for testability.
+    func handleFollowFocus(sender: NSButton, workspace: NSWorkspace) {
+        let notificationCenter = workspace.notificationCenter
 
         // The MainContentViewController is a singleton, so we can access it here.
         if let mainController = MainContentViewController.sharedInstance {
