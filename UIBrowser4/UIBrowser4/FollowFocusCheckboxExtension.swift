@@ -24,10 +24,24 @@ extension MasterSplitItemViewController {
      */
     @IBAction func followFocus(_ sender: NSButton) {
         // Action method connected from the FollowFocus checkbox to First Responder in Main.storyboard.
-        
-        // TODO: Implement this based on UI Browser 2.
-        // Select the element in the target application that currently has keyboard focus.
-        print("The Follow Focus checkbox's action method is not yet written.")
+        // This is a thin wrapper that calls the testable helper method with the real workspace.
+        handleFollowFocus(sender: sender, workspace: .shared)
+    }
+
+    /// Helper method with dependencies injected for testability.
+    func handleFollowFocus(sender: NSButton, workspace: NSWorkspace) {
+        let notificationCenter = workspace.notificationCenter
+
+        // The MainContentViewController is a singleton, so we can access it here.
+        if let mainController = MainContentViewController.sharedInstance {
+            if sender.state == .on {
+                // When the user turns on "Follow Focus", we start observing for when the frontmost application changes.
+                notificationCenter.addObserver(mainController, selector: #selector(MainContentViewController.frontmostApplicationDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
+            } else {
+                // When the user turns it off, we stop observing.
+                notificationCenter.removeObserver(mainController, name: NSWorkspace.didActivateApplicationNotification, object: nil)
+            }
+        }
     }
     
 }

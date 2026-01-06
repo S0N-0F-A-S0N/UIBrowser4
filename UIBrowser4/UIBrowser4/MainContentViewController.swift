@@ -216,7 +216,15 @@ class MainContentViewController: NSViewController {
             isFinishedLaunchingObservation = nil
         }
         // TODO: [self unhighlightAction:sender];
-        // TODO: ditto follow focus mode?
+        // Disable Follow Focus mode if it's active, as a new target is being set manually.
+        if let masterController = MasterSplitItemViewController.sharedInstance {
+            if masterController.followFocusButton.state == .on {
+                masterController.followFocusButton.state = .off
+
+                // Also remove the observer to stop tracking.
+                NSWorkspace.shared.notificationCenter.removeObserver(self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
+            }
+        }
         
         // Set the new running application target to the proposed target. From this point forward, methods that do not take a target parameter rely on the new running application target property's value, and UI Browser cannot recover from errors in setting up the new target by preserving or restoring the old target but must instead deal with errors affecting the new target.
         runningApplicationTarget = target
@@ -458,6 +466,40 @@ class MainContentViewController: NSViewController {
     // MARK: - NOTIFICATION METHODS
     
     /**
+     Handles the notification that is posted when the frontmost application changes.
+
+     This method is the entry point for the "Follow Focus" feature. It is called when `NSWorkspace.didActivateApplicationNotification` is observed.
+
+     - parameter notification: The `NSWorkspace.didActivateApplicationNotification` notification.
+     */
+    @objc func frontmostApplicationDidChange(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
+            return
+        }
+
+        // Don't do anything if UI Browser itself becomes active.
+        // The bundle identifier is likely 'com.pfiddlesoft.uibrowser4' based on project structure.
+        if app.bundleIdentifier == "com.pfiddlesoft.uibrowser4" {
+            return
+        }
+
+        // Get the accessibility element for the application.
+        guard let appElement = AccessibleElement.makeApplicationElement(processIdentifier: app.processIdentifier) as? AccessibleElement else {
+            return
+        }
+
+        // Get the focused UI element from the application.
+        if let focusedElement = appElement.attributeValue(for: kAXFocusedUIElementAttribute) as? AXUIElement {
+            // Create a temporary AccessibleElement for the focused element.
+            // We set observesDestruction to false because this is a temporary object.
+            if let accessibleFocusedElement = AccessibleElement(axElement: focusedElement, observesDestruction: false) {
+                // Display the newly focused element in the UI.
+                display(element: accessibleFocusedElement)
+            }
+        }
+    }
+
+    /**
      Clears the application and sets the title of the Target pop-up button to No Target when access is disabled.
      
      This notification method is called when UI Browser's access status is changed in the *Accessibility* list in the *Privacy* tab of the *Security & Privacy* pane in *System Preferences*. `MainContentViewController` is registered to observe the `didChangeAccessStatusNotification` notification in `viewDidLoad()`.
@@ -482,6 +524,86 @@ class MainContentViewController: NSViewController {
         
         // TODO: Reimplement this if decide to use my custom Detail buttom images.
         // mainWindowController!.setDetailButtonColor()
+    }
+
+    // MARK: - FOCUS TRACKING HELPERS
+
+    /// Displays a given accessibility element in the UI Browser, regardless of the current target.
+    /// This is the core method for the "Follow Focus" feature's UI update.
+    /// - Parameter element: The `AccessibleElement` to display.
+    private func display(element: AccessibleElement) {
+        // 1. Get the hierarchy path for the element.
+        guard let path = hierarchyPath(for: element) else {
+            print("Follow Focus Error: Could not determine hierarchy path for the element.")
+            return
+        }
+        guard let rootAppElement = path.first else {
+            print("Follow Focus Error: Path does not contain a root element.")
+            return
+        }
+
+        // 2. Get the running application for the root element.
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(rootAppElement.axElement, &pid) == .success,
+              let runningApp = NSRunningApplication(processIdentifier: pid) else {
+            print("Follow Focus Error: Could not get running application for the element.")
+            return
+        }
+
+        // 3. Set the application as the current target. This clears the old state and loads the root element.
+        updateApplication(forNewTarget: runningApp, usingTargetElement: rootAppElement)
+
+        // 4. Build the index path while simultaneously populating the data model for each step in the path.
+        let dataSource = ElementDataModel.sharedInstance
+
+        for i in 1..<path.count {
+            let parent = path[i-1]
+            let child = path[i]
+
+            guard let siblings = parent.AXChildren else {
+                print("Follow Focus Error: Could not get children of parent element \(parent).")
+                return // Path is broken
+            }
+
+            if let rowIndex = siblings.firstIndex(where: { $0.isEqual(to: child) }) {
+                // This is the key: we tell the data model to update itself as if the user
+                // had clicked on this item. This will load the children for the *next* level
+                // and set the current selection path in the model.
+                dataSource.updateDataModelForCurrentElementAt(level: i - 1, index: rowIndex)
+            } else {
+                print("Follow Focus Error: Could not find child \(child) in parent \(parent). Hierarchy mismatch.")
+                return // Path is broken
+            }
+        }
+
+        // 5. Now that the data model is fully populated along the path, tell the view to update.
+        // The `showView()` method will read the final selection path from the data model.
+        if let browserController = BrowserTabItemViewController.sharedInstance {
+            browserController.showView()
+        }
+    }
+
+    /// Builds the hierarchy path for a given accessibility element.
+    /// - Parameter element: The leaf element from which to build the path.
+    /// - Returns: An array of `AccessibleElement` objects representing the path from the root application element to the given element, or `nil` if the hierarchy is broken.
+    private func hierarchyPath(for element: AccessibleElement) -> [AccessibleElement]? {
+        var path: [AccessibleElement] = []
+        var currentElement: AccessibleElement? = element
+
+        while let current = currentElement {
+            path.insert(current, at: 0)
+
+            if current.isRole(kAXApplicationRole) {
+                // We have reached the top of the hierarchy for this application.
+                return path
+            }
+
+            currentElement = current.AXParent
+        }
+
+        // If we exit the loop because currentElement became nil before finding an application root,
+        // the hierarchy is malformed or incomplete.
+        return nil
     }
 
     // MARK: - ALERTS
