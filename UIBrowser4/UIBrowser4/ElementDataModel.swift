@@ -414,11 +414,13 @@ final class ElementDataModel {
             return (briefAppleScriptDescription, fullAppleScriptDescription)
         }
         
+        let currentTerminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
+
         // Compose descriptions of the element.
         // TODO: make AppleScript changes to mediumElementDescription like brief... and full...
-        var briefElementDescription: String = briefDescription(ofElement: element)
-        let mediumElementDescription: String = mediumDescription(ofElement: element, atIndexPath: NSIndexPath(index: 0))
-        var fullElementDescription: NSAttributedString = fullDescription(ofElement: element, atIndexPath: NSIndexPath(index: 0))
+        var briefElementDescription: String = briefDescription(ofElement: element, terminology: currentTerminology)
+        let mediumElementDescription: String = mediumDescription(ofElement: element, atIndexPath: NSIndexPath(index: 0), terminology: currentTerminology)
+        var fullElementDescription: NSAttributedString = fullDescription(ofElement: element, atIndexPath: NSIndexPath(index: 0), terminology: currentTerminology)
         
         // TODO: Add mediumAppleScriptDescription here and elsewhere.
         // Compose AppleScript references to the element.
@@ -427,7 +429,7 @@ final class ElementDataModel {
         (briefAppleScriptDescription, fullAppleScriptDescription) = appleScriptDescriptions(forElement: element)
         
         //  Replace descriptions for briefElementDescription and fullElementDescription that were set above if the current terminology preference is ApppleScript.
-        if UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY) == Terminology.appleScript.rawValue {
+        if currentTerminology == Terminology.appleScript.rawValue {
             briefElementDescription = briefAppleScriptDescription
             fullElementDescription = fullAppleScriptDescription
         }
@@ -558,6 +560,7 @@ final class ElementDataModel {
             var parentNode: ElementNodeInfo
             var childNode: ElementNodeInfo
             
+            let currentTerminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
             // Loop through every child element in the childElements array, creating an ElementNodeInfo dictionary for each and appending it to the new childNodes array. The childNodes array will then be appended to the elementNodeTree array.
             var appleScriptRoleIndex: [String: Int] = [:] // create a temporary dictionary for use by the appleScriptDescriptions(forElement:elementIndex:roleIndex:) nested method to accumulate an array of AppleScript indexes for specific roles
             // TODO: change the for..in terms to fix destroyed problem; is it ok?
@@ -572,15 +575,15 @@ final class ElementDataModel {
                 childCount = element.childCount()
                 indexPath = (currentElementNode[.indexPathKey] as! NSIndexPath).adding(idx)
                 
-                briefElementDescription = briefDescription(ofElement: element)
-                mediumElementDescription = mediumDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath)
-                fullElementDescription = fullDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath)
+                briefElementDescription = briefDescription(ofElement: element, terminology: currentTerminology)
+                mediumElementDescription = mediumDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath, terminology: currentTerminology)
+                fullElementDescription = fullDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath, terminology: currentTerminology)
                 
                 // Compose AppleScript references to the element.
                 (briefAppleScriptDescription, fullAppleScriptDescription) = appleScriptDescriptions(forElement: element, elementIndex: idx, roleIndex: &appleScriptRoleIndex)
                 
                 //  Replace descriptions for briefElementDescription and fullElementDescription that were set above if the current terminology preference is ApppleScript.
-                if UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY) == Terminology.appleScript.rawValue {
+                if currentTerminology == Terminology.appleScript.rawValue {
                     briefElementDescription = briefAppleScriptDescription
                     fullElementDescription = fullAppleScriptDescription
                 }
@@ -727,6 +730,7 @@ final class ElementDataModel {
             var parentNode: ElementNodeInfo
             var childNode: ElementNodeInfo
             
+            let currentTerminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
             // Loop through every child element in the childElements array, creating an ElementNodeInfo dictionary for each and appending it to the new childNodes array. The childNodes array will then be appended to the elementNodeTree array.
             var appleScriptRoleIndex: [String: Int] = [:] // create a temporary dictionary for use by the appleScriptDescriptions(forElement:elementIndex:roleIndex:) nested method to accumulate an array of AppleScript indexes for specific roles
             // TODO: change the for..in terms to fix destroyed problem; is it ok?
@@ -741,15 +745,15 @@ final class ElementDataModel {
                 childCount = element.childCount()
                 indexPath = (currentElementNode[.indexPathKey] as! NSIndexPath).adding(idx)
                 
-                briefElementDescription = briefDescription(ofElement: element)
-                mediumElementDescription = mediumDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath)
-                fullElementDescription = fullDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath)
+                briefElementDescription = briefDescription(ofElement: element, terminology: currentTerminology)
+                mediumElementDescription = mediumDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath, terminology: currentTerminology)
+                fullElementDescription = fullDescription(ofElement: element, atIndexPath: indexPath as NSIndexPath, terminology: currentTerminology)
                 
                 // Compose AppleScript references to the element.
                 (briefAppleScriptDescription, fullAppleScriptDescription) = appleScriptDescriptions(forElement: element, elementIndex: idx, roleIndex: &appleScriptRoleIndex)
                 
                 //  Replace descriptions for briefElementDescription and fullElementDescription that were set above if the current terminology preference is ApppleScript.
-                if UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY) == Terminology.appleScript.rawValue {
+                if currentTerminology == Terminology.appleScript.rawValue {
                     briefElementDescription = briefAppleScriptDescription
                     fullElementDescription = fullAppleScriptDescription
                 }
@@ -889,20 +893,21 @@ final class ElementDataModel {
     func updateTerminology() {
         // Called from BrowserTabItemViewController [and later others] updateTerminology() when the user chooses a new terminology preference, followed immediately by calls to reloadDataForRowIndexes(_:inColumn:).
         
+        let currentTerminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
         var node: ElementNodeInfo
         for columnIndex in 0..<elementNodeTree.count {
             for rowIndex in 0..<elementNodeTree[columnIndex].count {
                 node = elementNodeTree[columnIndex][rowIndex]
                 let element = node[.elementKey] as! AccessibleElement
                 let indexPath = node[.indexPathKey] as! NSIndexPath
-                if UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY) == Terminology.appleScript.rawValue {
+                if currentTerminology == Terminology.appleScript.rawValue {
                     // AppleScript descriptions were already composed and cached in updateDataModel(forApplicationElement:) and updateDataModelForCurrentElementAt(level:index:).
                     node[.briefElementDescriptionKey] = node[.briefAppleScriptDescriptionKey]
                     node[.fullElementDescriptionKey] = node[.fullAppleScriptDescriptionKey]
                 } else {
-                    node[.briefElementDescriptionKey] = briefDescription(ofElement: element)
-                    node[.mediumElementDescriptionKey] = mediumDescription(ofElement: element, atIndexPath: indexPath)
-                    node[.fullElementDescriptionKey] = fullDescription(ofElement: element, atIndexPath: indexPath)
+                    node[.briefElementDescriptionKey] = briefDescription(ofElement: element, terminology: currentTerminology)
+                    node[.mediumElementDescriptionKey] = mediumDescription(ofElement: element, atIndexPath: indexPath, terminology: currentTerminology)
+                    node[.fullElementDescriptionKey] = fullDescription(ofElement: element, atIndexPath: indexPath, terminology: currentTerminology)
                 }
                 elementNodeTree[columnIndex][rowIndex] = node
             }
@@ -920,9 +925,9 @@ final class ElementDataModel {
      
      - returns: A brief description of the element as a String
      */
-    private func briefDescription(ofElement element: AccessibleElement) -> String {
-        let terminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
-        switch terminology {
+    private func briefDescription(ofElement element: AccessibleElement, terminology: Int? = nil) -> String {
+        let currentTerminology = terminology ?? UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
+        switch currentTerminology {
         case Terminology.natural.rawValue:
             return briefNaturalDescription(ofElement: element)
         case Terminology.raw.rawValue, Terminology.accessibility.rawValue:
@@ -944,9 +949,9 @@ final class ElementDataModel {
      
      - returns: A medium description of the element as a String
      */
-    private func mediumDescription(ofElement element: AccessibleElement, atIndexPath path: NSIndexPath) -> String {
-        let terminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
-        switch terminology {
+    private func mediumDescription(ofElement element: AccessibleElement, atIndexPath path: NSIndexPath, terminology: Int? = nil) -> String {
+        let currentTerminology = terminology ?? UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
+        switch currentTerminology {
         case Terminology.natural.rawValue:
             return mediumNaturalDescription(ofElement: element, atIndexPath: path)
         case Terminology.raw.rawValue, Terminology.accessibility.rawValue:
@@ -972,11 +977,11 @@ final class ElementDataModel {
      
      - returns: A full description of the element as an NSAttributedString
      */
-    func fullDescription(ofElement element: AccessibleElement, atIndexPath path: NSIndexPath) -> NSAttributedString {
+    func fullDescription(ofElement element: AccessibleElement, atIndexPath path: NSIndexPath, terminology: Int? = nil) -> NSAttributedString {
         // Called by AttributeDataSource descriptionOfAttributeValue(_:ofType:element:).
         
-        let terminology = UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
-        switch terminology {
+        let currentTerminology = terminology ?? UserDefaults.standard.integer(forKey: TERMINOLOGY_DEFAULTS_KEY)
+        switch currentTerminology {
         case Terminology.natural.rawValue:
             return fullNaturalDescription(ofElement: element, atIndexPath: path)
         case Terminology.raw.rawValue, Terminology.accessibility.rawValue:
