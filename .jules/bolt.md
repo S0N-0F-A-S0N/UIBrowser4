@@ -1,0 +1,3 @@
+## 2024-11-11 - [Hoisting UserDefaults Lookups]
+**Learning:** [In Swift/macOS development, reading from `UserDefaults` is thread-safe but incurs synchronization overhead. Doing so inside tight loops (like iterating over all nodes in a large accessibility tree) is a performance anti-pattern. Fetching the value once per update pass and passing it down is significantly more efficient and prevents race conditions if the default changes mid-pass.]
+**Action:** [When processing large collections or trees, hoist `UserDefaults` reads outside of the loop and pass the value down the call stack, optionally using default parameters for backward compatibility.]
